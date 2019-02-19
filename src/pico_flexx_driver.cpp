@@ -30,6 +30,7 @@
 #include <ros/console.h>
 #include <nodelet/nodelet.h>
 
+#include <image_numbered_msgs/ImageNumbered.h>
 #include <std_msgs/Header.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <sensor_msgs/Image.h>
@@ -48,6 +49,7 @@
 #define PF_TOPIC_MONO8      "/image_mono8"
 #define PF_TOPIC_MONO16     "/image_mono16"
 #define PF_TOPIC_DEPTH      "/image_depth"
+#define PF_TOPIC_IMAGE_NUMBERED "/image_numbered"
 #define PF_TOPIC_NOISE      "/image_noise"
 #define PF_TOPIC_CLOUD      "/points"
 
@@ -109,6 +111,7 @@ private:
     MONO_8,
     MONO_16,
     DEPTH,
+    IMAGE_NUMBERED,
     NOISE,
     CLOUD,
     COUNT
@@ -570,6 +573,7 @@ private:
     publisher[0][MONO_8] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_MONO8, queueSize, cb, cb);
     publisher[0][MONO_16] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_MONO16, queueSize, cb, cb);
     publisher[0][DEPTH] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_DEPTH, queueSize, cb, cb);
+    publisher[0][IMAGE_NUMBERED] = nh.advertise<image_numbered_msgs::ImageNumbered>(baseName + PF_TOPIC_IMAGE_NUMBERED, queueSize, cb, cb);
     publisher[0][NOISE] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_NOISE, queueSize, cb, cb);
     publisher[0][CLOUD] = nh.advertise<sensor_msgs::PointCloud2>(baseName + PF_TOPIC_CLOUD, queueSize, cb, cb);
 
@@ -578,6 +582,7 @@ private:
     publisher[1][MONO_8] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_MONO8, queueSize, cb, cb);
     publisher[1][MONO_16] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_MONO16, queueSize, cb, cb);
     publisher[1][DEPTH] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_DEPTH, queueSize, cb, cb);
+    publisher[0][IMAGE_NUMBERED] = nh.advertise<image_numbered_msgs::ImageNumbered>(baseName + "/stream2" + PF_TOPIC_IMAGE_NUMBERED, queueSize, cb, cb);
     publisher[1][NOISE] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_NOISE, queueSize, cb, cb);
     publisher[1][CLOUD] = nh.advertise<sensor_msgs::PointCloud2>(baseName + "/stream2" + PF_TOPIC_CLOUD, queueSize, cb, cb);
   }
@@ -919,7 +924,9 @@ private:
     std::unique_ptr<royale::DepthData> data;
     sensor_msgs::CameraInfoPtr msgCameraInfo;
     sensor_msgs::ImagePtr msgMono8, msgMono16, msgDepth, msgNoise;
+    image_numbered_msgs::ImageNumberedPtr msgImageNumbered;
     sensor_msgs::PointCloud2Ptr msgCloud;
+    uint64_t imageNumber = 0;
 
     msgCameraInfo = sensor_msgs::CameraInfoPtr(new sensor_msgs::CameraInfo);
     msgMono8 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
@@ -946,8 +953,8 @@ private:
       size_t streamIndex;
       if (findStreamIndex(data->streamId, streamIndex))
       {
-        extractData(*data, msgCameraInfo, msgCloud, msgMono8, msgMono16, msgDepth, msgNoise, streamIndex);
-        publish(msgCameraInfo, msgCloud, msgMono8, msgMono16, msgDepth, msgNoise, streamIndex);
+        extractData(*data, msgCameraInfo, msgCloud, msgMono8, msgMono16, msgDepth, msgImageNumbered, msgNoise, imageNumber, streamIndex);
+        publish(msgCameraInfo, msgCloud, msgMono8, msgMono16, msgDepth, msgImageNumbered, msgNoise, streamIndex);
       }
       lockStatus.unlock();
 
@@ -977,8 +984,9 @@ private:
   }
 
   void extractData(const royale::DepthData &data, sensor_msgs::CameraInfoPtr &msgCameraInfo, sensor_msgs::PointCloud2Ptr &msgCloud,
-                   sensor_msgs::ImagePtr &msgMono8, sensor_msgs::ImagePtr &msgMono16, sensor_msgs::ImagePtr &msgDepth, sensor_msgs::ImagePtr &msgNoise,
-                   size_t streamIndex = 0) const
+                   sensor_msgs::ImagePtr &msgMono8, sensor_msgs::ImagePtr &msgMono16, sensor_msgs::ImagePtr &msgDepth,
+                   image_numbered_msgs::ImageNumberedPtr &msgImageNumbered, sensor_msgs::ImagePtr &msgNoise,
+                   uint64_t &imageNumber, size_t streamIndex = 0) const
   {
     std_msgs::Header header;
     header.frame_id = baseNameTF + PF_TF_OPT_FRAME;
@@ -993,7 +1001,7 @@ private:
       msgCameraInfo->width = data.width;
     }
 
-    if(!(status[streamIndex][MONO_8] || status[streamIndex][MONO_16] || status[streamIndex][DEPTH] || status[streamIndex][NOISE] || status[streamIndex][CLOUD]))
+    if(!(status[streamIndex][MONO_8] || status[streamIndex][MONO_16] || status[streamIndex][DEPTH] || status[streamIndex][IMAGE_NUMBERED] || status[streamIndex][NOISE] || status[streamIndex][CLOUD]))
     {
       return;
     }
@@ -1013,6 +1021,16 @@ private:
     msgDepth->encoding = sensor_msgs::image_encodings::TYPE_32FC1;
     msgDepth->step = (uint32_t)(sizeof(float) * data.width);
     msgDepth->data.resize(sizeof(float) * data.points.size());
+
+    msgImageNumbered->image.header = msgDepth->header;
+    msgImageNumbered->image.height = msgDepth->height;
+    msgImageNumbered->image.width = msgDepth->width;
+    msgImageNumbered->image.is_bigendian = msgDepth->is_bigendian;
+    msgImageNumbered->image.encoding = msgDepth->encoding;
+    msgImageNumbered->image.step = msgDepth->step;
+    msgImageNumbered->image.data = msgDepth->data;
+    msgImageNumbered->number = imageNumber; 
+    imageNumber++;
 
     msgNoise->header = header;
     msgNoise->height = data.height;
@@ -1165,7 +1183,8 @@ private:
 
   void publish(sensor_msgs::CameraInfoPtr &msgCameraInfo, sensor_msgs::PointCloud2Ptr &msgCloud,
                sensor_msgs::ImagePtr &msgMono8, sensor_msgs::ImagePtr &msgMono16,
-               sensor_msgs::ImagePtr &msgDepth, sensor_msgs::ImagePtr &msgNoise,
+               sensor_msgs::ImagePtr &msgDepth, image_numbered_msgs::ImageNumberedPtr &msgImageNumbered,
+               sensor_msgs::ImagePtr &msgNoise,
                size_t streamIndex = 0) const
   {
     if(status[streamIndex][CAMERA_INFO])
@@ -1187,6 +1206,11 @@ private:
     {
       publisher[streamIndex][DEPTH].publish(msgDepth);
       msgDepth = sensor_msgs::ImagePtr(new sensor_msgs::Image);
+    }
+    if(status[streamIndex][IMAGE_NUMBERED])
+    {
+      publisher[streamIndex][IMAGE_NUMBERED].publish(msgImageNumbered);
+      msgImageNumbered = image_numbered_msgs::ImageNumberedPtr(new image_numbered_msgs::ImageNumbered);
     }
     if(status[streamIndex][NOISE])
     {
