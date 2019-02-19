@@ -620,7 +620,13 @@ private:
       OUT_ERROR("camera with id '" << _id << "' not found!");
       return false;
     }
-    cameraDevice = manager.createCamera(camlist[index]);
+    constexpr bool kSlaveMode = true;
+    if (kSlaveMode) {
+      cameraDevice =
+          manager.createCamera(camlist[index], royale::TriggerMode::SLAVE);
+    } else {
+      cameraDevice = manager.createCamera(camlist[index]);
+    }
 
     if(cameraDevice == nullptr)
     {
