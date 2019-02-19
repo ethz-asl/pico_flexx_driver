@@ -938,6 +938,7 @@ private:
     msgMono8 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     msgMono16 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     msgDepth = sensor_msgs::ImagePtr(new sensor_msgs::Image);
+    msgImageNumbered = image_numbered_msgs::ImageNumberedPtr(new image_numbered_msgs::ImageNumbered);
     msgNoise = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     msgCloud = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
 
@@ -1027,14 +1028,14 @@ private:
     msgDepth->encoding = sensor_msgs::image_encodings::TYPE_32FC1;
     msgDepth->step = (uint32_t)(sizeof(float) * data.width);
     msgDepth->data.resize(sizeof(float) * data.points.size());
-
+    
     msgImageNumbered->image.header = msgDepth->header;
     msgImageNumbered->image.height = msgDepth->height;
     msgImageNumbered->image.width = msgDepth->width;
     msgImageNumbered->image.is_bigendian = msgDepth->is_bigendian;
     msgImageNumbered->image.encoding = msgDepth->encoding;
     msgImageNumbered->image.step = msgDepth->step;
-    msgImageNumbered->image.data = msgDepth->data;
+    msgImageNumbered->image.data.resize(sizeof(float) * data.points.size());
     msgImageNumbered->number = imageNumber; 
     imageNumber++;
 
@@ -1084,6 +1085,8 @@ private:
     const float maxNoise = (float)config.max_noise;
     const royale::DepthPoint *itI = &data.points[0];
     float *itD = (float *)&msgDepth->data[0];
+    float *itIN = itD;
+
     float *itN = (float *)&msgNoise->data[0];
     uint16_t *itM = (uint16_t *)&msgMono16->data[0];
     for(size_t i = 0; i < data.points.size(); ++i, ++itI, ++itD, ++itM, ++itN)
