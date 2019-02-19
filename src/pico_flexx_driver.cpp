@@ -582,7 +582,7 @@ private:
     publisher[1][MONO_8] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_MONO8, queueSize, cb, cb);
     publisher[1][MONO_16] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_MONO16, queueSize, cb, cb);
     publisher[1][DEPTH] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_DEPTH, queueSize, cb, cb);
-    publisher[0][IMAGE_NUMBERED] = nh.advertise<image_numbered_msgs::ImageNumbered>(baseName + "/stream2" + PF_TOPIC_IMAGE_NUMBERED, queueSize, cb, cb);
+    publisher[1][IMAGE_NUMBERED] = nh.advertise<image_numbered_msgs::ImageNumbered>(baseName + "/stream2" + PF_TOPIC_IMAGE_NUMBERED, queueSize, cb, cb);
     publisher[1][NOISE] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_NOISE, queueSize, cb, cb);
     publisher[1][CLOUD] = nh.advertise<sensor_msgs::PointCloud2>(baseName + "/stream2" + PF_TOPIC_CLOUD, queueSize, cb, cb);
   }

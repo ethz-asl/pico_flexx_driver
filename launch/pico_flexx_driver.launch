@@ -6,7 +6,7 @@
   <!-- ID of the use case. A list of supported use cases is listed on startup. -->
   <arg name="use_case"           default="0"/>
   <!-- Enable or disable automatic expusure. -->
-  <arg name="automatic_exposure" default="true"/>
+  <arg name="automatic_exposure" default="false"/>
   <!-- Exposure time. Only for manual exposure. -->
   <arg name="exposure_time"      default="1000"/>
   <!-- Maximum allowed noise. Data with higher noise will be filtered out. -->
