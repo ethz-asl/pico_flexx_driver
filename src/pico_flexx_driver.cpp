@@ -42,16 +42,17 @@
 #include <dynamic_reconfigure/server.h>
 #include <pico_flexx_driver/pico_flexx_driverConfig.h>
 
-#define PF_DEFAULT_NS       "pico_flexx"
-#define PF_TF_LINK          "_link"
-#define PF_TF_OPT_FRAME     "_optical_frame"
-#define PF_TOPIC_INFO       "/camera_info"
-#define PF_TOPIC_MONO8      "/image_mono8"
-#define PF_TOPIC_MONO16     "/image_mono16"
-#define PF_TOPIC_DEPTH      "/image_depth"
-#define PF_TOPIC_IMAGE_NUMBERED "/image_numbered"
-#define PF_TOPIC_NOISE      "/image_noise"
-#define PF_TOPIC_CLOUD      "/points"
+#define PF_DEFAULT_NS "pico_flexx"
+#define PF_TF_LINK "_link"
+#define PF_TF_OPT_FRAME "_optical_frame"
+#define PF_TOPIC_INFO "/camera_info"
+#define PF_TOPIC_MONO8 "/image_mono8"
+#define PF_TOPIC_MONO16 "/image_mono16"
+#define PF_TOPIC_DEPTH "/image_raw"
+#define PF_TOPIC_DEPTH_NUMBERED "/image_numbered"
+#define PF_TOPIC_MONO16_NUMBERED "/image_mono16_numbered"
+#define PF_TOPIC_NOISE "/image_noise"
+#define PF_TOPIC_CLOUD "/points"
 
 // fix for royale sdk definitions
 #undef __PRETTY_FUNCTION__
@@ -111,7 +112,8 @@ private:
     MONO_8,
     MONO_16,
     DEPTH,
-    IMAGE_NUMBERED,
+    DEPTH_NUMBERED,
+    MONO16_NUMBERED,
     NOISE,
     CLOUD,
     COUNT
@@ -491,7 +493,7 @@ private:
     priv_nh.param("exposure_time_stream2", exposureTimeStream2, 1000);
     priv_nh.param("max_noise", maxNoise, 0.7);
     priv_nh.param("range_factor", rangeFactor, 2.0);
-    priv_nh.param("queue_size", queueSize, 2);
+    priv_nh.param("queue_size", queueSize, 20);
     priv_nh.param("base_name_tf", baseNameTF, baseName);
 
     OUT_INFO("parameter:" << std::endl
@@ -569,22 +571,45 @@ private:
     ros::SubscriberStatusCallback cb = boost::bind(&PicoFlexx::callbackTopicStatus, this);
 
     publisher[0].resize(COUNT);
-    publisher[0][CAMERA_INFO] = nh.advertise<sensor_msgs::CameraInfo>(baseName + PF_TOPIC_INFO, queueSize, cb, cb);
-    publisher[0][MONO_8] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_MONO8, queueSize, cb, cb);
-    publisher[0][MONO_16] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_MONO16, queueSize, cb, cb);
-    publisher[0][DEPTH] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_DEPTH, queueSize, cb, cb);
-    publisher[0][IMAGE_NUMBERED] = nh.advertise<image_numbered_msgs::ImageNumbered>(baseName + PF_TOPIC_IMAGE_NUMBERED, queueSize, cb, cb);
-    publisher[0][NOISE] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_NOISE, queueSize, cb, cb);
-    publisher[0][CLOUD] = nh.advertise<sensor_msgs::PointCloud2>(baseName + PF_TOPIC_CLOUD, queueSize, cb, cb);
+    publisher[0][CAMERA_INFO] = nh.advertise<sensor_msgs::CameraInfo>(
+        baseName + PF_TOPIC_INFO, queueSize, cb, cb);
+    publisher[0][MONO_8] = nh.advertise<sensor_msgs::Image>(
+        baseName + PF_TOPIC_MONO8, queueSize, cb, cb);
+    publisher[0][MONO_16] = nh.advertise<sensor_msgs::Image>(
+        baseName + PF_TOPIC_MONO16, queueSize, cb, cb);
+    publisher[0][DEPTH] = nh.advertise<sensor_msgs::Image>(
+        baseName + PF_TOPIC_DEPTH, queueSize, cb, cb);
+    publisher[0][DEPTH_NUMBERED] =
+        nh.advertise<image_numbered_msgs::ImageNumbered>(
+            baseName + PF_TOPIC_DEPTH_NUMBERED, queueSize, cb, cb);
+    publisher[0][MONO16_NUMBERED] =
+        nh.advertise<image_numbered_msgs::ImageNumbered>(
+            baseName + PF_TOPIC_MONO16_NUMBERED, queueSize, cb, cb);
+    publisher[0][NOISE] = nh.advertise<sensor_msgs::Image>(
+        baseName + PF_TOPIC_NOISE, queueSize, cb, cb);
+    publisher[0][CLOUD] = nh.advertise<sensor_msgs::PointCloud2>(
+        baseName + PF_TOPIC_CLOUD, queueSize, cb, cb);
 
     publisher[1].resize(COUNT);
-    publisher[1][CAMERA_INFO] = nh.advertise<sensor_msgs::CameraInfo>(baseName + "/stream2" + PF_TOPIC_INFO, queueSize, cb, cb);
-    publisher[1][MONO_8] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_MONO8, queueSize, cb, cb);
-    publisher[1][MONO_16] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_MONO16, queueSize, cb, cb);
-    publisher[1][DEPTH] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_DEPTH, queueSize, cb, cb);
-    publisher[1][IMAGE_NUMBERED] = nh.advertise<image_numbered_msgs::ImageNumbered>(baseName + "/stream2" + PF_TOPIC_IMAGE_NUMBERED, queueSize, cb, cb);
-    publisher[1][NOISE] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_NOISE, queueSize, cb, cb);
-    publisher[1][CLOUD] = nh.advertise<sensor_msgs::PointCloud2>(baseName + "/stream2" + PF_TOPIC_CLOUD, queueSize, cb, cb);
+    publisher[1][CAMERA_INFO] = nh.advertise<sensor_msgs::CameraInfo>(
+        baseName + "/stream2" + PF_TOPIC_INFO, queueSize, cb, cb);
+    publisher[1][MONO_8] = nh.advertise<sensor_msgs::Image>(
+        baseName + "/stream2" + PF_TOPIC_MONO8, queueSize, cb, cb);
+    publisher[1][MONO_16] = nh.advertise<sensor_msgs::Image>(
+        baseName + "/stream2" + PF_TOPIC_MONO16, queueSize, cb, cb);
+    publisher[1][DEPTH] = nh.advertise<sensor_msgs::Image>(
+        baseName + "/stream2" + PF_TOPIC_DEPTH, queueSize, cb, cb);
+    publisher[1][DEPTH_NUMBERED] =
+        nh.advertise<image_numbered_msgs::ImageNumbered>(
+            baseName + "/stream2" + PF_TOPIC_DEPTH_NUMBERED, queueSize, cb, cb);
+    publisher[1][MONO16_NUMBERED] =
+        nh.advertise<image_numbered_msgs::ImageNumbered>(
+            baseName + "/stream2" + PF_TOPIC_MONO16_NUMBERED, queueSize, cb,
+            cb);
+    publisher[1][NOISE] = nh.advertise<sensor_msgs::Image>(
+        baseName + "/stream2" + PF_TOPIC_NOISE, queueSize, cb, cb);
+    publisher[1][CLOUD] = nh.advertise<sensor_msgs::PointCloud2>(
+        baseName + "/stream2" + PF_TOPIC_CLOUD, queueSize, cb, cb);
   }
 
   bool selectCamera(const std::string &id)
@@ -930,7 +955,8 @@ private:
     std::unique_ptr<royale::DepthData> data;
     sensor_msgs::CameraInfoPtr msgCameraInfo;
     sensor_msgs::ImagePtr msgMono8, msgMono16, msgDepth, msgNoise;
-    image_numbered_msgs::ImageNumberedPtr msgImageNumbered;
+    image_numbered_msgs::ImageNumberedPtr msgDepthNumbered;
+    image_numbered_msgs::ImageNumberedPtr msgMono16Numbered;
     sensor_msgs::PointCloud2Ptr msgCloud;
     uint64_t imageNumber = 0;
 
@@ -938,16 +964,18 @@ private:
     msgMono8 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     msgMono16 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     msgDepth = sensor_msgs::ImagePtr(new sensor_msgs::Image);
-    msgImageNumbered = image_numbered_msgs::ImageNumberedPtr(new image_numbered_msgs::ImageNumbered);
+    msgDepthNumbered = image_numbered_msgs::ImageNumberedPtr(
+        new image_numbered_msgs::ImageNumbered);
+    msgMono16Numbered = image_numbered_msgs::ImageNumberedPtr(
+        new image_numbered_msgs::ImageNumbered);
     msgNoise = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     msgCloud = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
 
     std::chrono::high_resolution_clock::time_point start, end;
     std::unique_lock<std::mutex> lock(lockData);
-    while(running && ros::ok())
-    {
-      if(!cvNewData.wait_for(lock, std::chrono::milliseconds(300), [this] { return this->newData; }))
-      {
+    while (running && ros::ok()) {
+      if (!cvNewData.wait_for(lock, std::chrono::milliseconds(10),
+                              [this] { return this->newData; })) {
         continue;
       }
 
@@ -958,10 +986,12 @@ private:
 
       lockStatus.lock();
       size_t streamIndex;
-      if (findStreamIndex(data->streamId, streamIndex))
-      {
-        extractData(*data, msgCameraInfo, msgCloud, msgMono8, msgMono16, msgDepth, msgImageNumbered, msgNoise, imageNumber, streamIndex);
-        publish(msgCameraInfo, msgCloud, msgMono8, msgMono16, msgDepth, msgImageNumbered, msgNoise, streamIndex);
+      if (findStreamIndex(data->streamId, streamIndex)) {
+        extractData(*data, msgCameraInfo, msgCloud, msgMono8, msgMono16,
+                    msgDepth, msgDepthNumbered, msgMono16Numbered, msgNoise,
+                    imageNumber, streamIndex);
+        publish(msgCameraInfo, msgCloud, msgMono8, msgMono16, msgDepth,
+                msgDepthNumbered, msgMono16Numbered, msgNoise, streamIndex);
       }
       lockStatus.unlock();
 
@@ -990,11 +1020,16 @@ private:
     return true;
   }
 
-  void extractData(const royale::DepthData &data, sensor_msgs::CameraInfoPtr &msgCameraInfo, sensor_msgs::PointCloud2Ptr &msgCloud,
-                   sensor_msgs::ImagePtr &msgMono8, sensor_msgs::ImagePtr &msgMono16, sensor_msgs::ImagePtr &msgDepth,
-                   image_numbered_msgs::ImageNumberedPtr &msgImageNumbered, sensor_msgs::ImagePtr &msgNoise,
-                   uint64_t &imageNumber, size_t streamIndex = 0) const
-  {
+  void extractData(const royale::DepthData& data,
+                   sensor_msgs::CameraInfoPtr& msgCameraInfo,
+                   sensor_msgs::PointCloud2Ptr& msgCloud,
+                   sensor_msgs::ImagePtr& msgMono8,
+                   sensor_msgs::ImagePtr& msgMono16,
+                   sensor_msgs::ImagePtr& msgDepth,
+                   image_numbered_msgs::ImageNumberedPtr& msgDepthNumbered,
+                   image_numbered_msgs::ImageNumberedPtr& msgMono16Numbered,
+                   sensor_msgs::ImagePtr& msgNoise, uint64_t& imageNumber,
+                   size_t streamIndex = 0) const {
     std_msgs::Header header;
     header.frame_id = baseNameTF + PF_TF_OPT_FRAME;
     header.seq = 0;
@@ -1008,8 +1043,10 @@ private:
       msgCameraInfo->width = data.width;
     }
 
-    if(!(status[streamIndex][MONO_8] || status[streamIndex][MONO_16] || status[streamIndex][DEPTH] || status[streamIndex][IMAGE_NUMBERED] || status[streamIndex][NOISE] || status[streamIndex][CLOUD]))
-    {
+    if (!(status[streamIndex][MONO_8] || status[streamIndex][MONO_16] ||
+          status[streamIndex][DEPTH] || status[streamIndex][DEPTH_NUMBERED] ||
+          status[streamIndex][MONO16_NUMBERED] || status[streamIndex][NOISE] ||
+          status[streamIndex][CLOUD])) {
       return;
     }
 
@@ -1028,15 +1065,26 @@ private:
     msgDepth->encoding = sensor_msgs::image_encodings::TYPE_32FC1;
     msgDepth->step = (uint32_t)(sizeof(float) * data.width);
     msgDepth->data.resize(sizeof(float) * data.points.size());
-    
-    msgImageNumbered->image.header = msgDepth->header;
-    msgImageNumbered->image.height = msgDepth->height;
-    msgImageNumbered->image.width = msgDepth->width;
-    msgImageNumbered->image.is_bigendian = msgDepth->is_bigendian;
-    msgImageNumbered->image.encoding = msgDepth->encoding;
-    msgImageNumbered->image.step = msgDepth->step;
-    msgImageNumbered->image.data.resize(sizeof(float) * data.points.size());
-    msgImageNumbered->number = imageNumber; 
+
+    msgDepthNumbered->header = msgDepth->header;
+    msgDepthNumbered->image.header = msgDepth->header;
+    msgDepthNumbered->image.height = msgDepth->height;
+    msgDepthNumbered->image.width = msgDepth->width;
+    msgDepthNumbered->image.is_bigendian = msgDepth->is_bigendian;
+    msgDepthNumbered->image.encoding = msgDepth->encoding;
+    msgDepthNumbered->image.step = msgDepth->step;
+    msgDepthNumbered->image.data.resize(sizeof(float) * data.points.size());
+    msgDepthNumbered->number = imageNumber;
+
+    msgMono16Numbered->header = msgMono16->header;
+    msgMono16Numbered->image.header = msgMono16->header;
+    msgMono16Numbered->image.height = msgMono16->height;
+    msgMono16Numbered->image.width = msgMono16->width;
+    msgMono16Numbered->image.is_bigendian = msgMono16->is_bigendian;
+    msgMono16Numbered->image.encoding = msgMono16->encoding;
+    msgMono16Numbered->image.step = msgMono16->step;
+    msgMono16Numbered->image.data.resize(sizeof(uint16_t) * data.points.size());
+    msgMono16Numbered->number = imageNumber;
     imageNumber++;
 
     msgNoise->header = header;
@@ -1120,6 +1168,8 @@ private:
     }
 
     computeMono8(msgMono16, msgMono8, msgCloud);
+    msgDepthNumbered->image.data = msgDepth->data;
+    msgMono16Numbered->image.data = msgMono16->data;
   }
 
   void computeMono8(const sensor_msgs::ImageConstPtr &msgMono16, sensor_msgs::ImagePtr &msgMono8, sensor_msgs::PointCloud2Ptr &msgCloud) const
@@ -1190,44 +1240,45 @@ private:
     }
   }
 
-  void publish(sensor_msgs::CameraInfoPtr &msgCameraInfo, sensor_msgs::PointCloud2Ptr &msgCloud,
-               sensor_msgs::ImagePtr &msgMono8, sensor_msgs::ImagePtr &msgMono16,
-               sensor_msgs::ImagePtr &msgDepth, image_numbered_msgs::ImageNumberedPtr &msgImageNumbered,
-               sensor_msgs::ImagePtr &msgNoise,
-               size_t streamIndex = 0) const
-  {
-    if(status[streamIndex][CAMERA_INFO])
-    {
+  void publish(sensor_msgs::CameraInfoPtr& msgCameraInfo,
+               sensor_msgs::PointCloud2Ptr& msgCloud,
+               sensor_msgs::ImagePtr& msgMono8,
+               sensor_msgs::ImagePtr& msgMono16,
+               sensor_msgs::ImagePtr& msgDepth,
+               image_numbered_msgs::ImageNumberedPtr& msgDepthNumbered,
+               image_numbered_msgs::ImageNumberedPtr& msgMono16Numbered,
+               sensor_msgs::ImagePtr& msgNoise, size_t streamIndex = 0) const {
+    if (status[streamIndex][CAMERA_INFO]) {
       publisher[streamIndex][CAMERA_INFO].publish(msgCameraInfo);
       msgCameraInfo = sensor_msgs::CameraInfoPtr(new sensor_msgs::CameraInfo);
     }
-    if(status[streamIndex][MONO_8])
-    {
+    if (status[streamIndex][MONO_8]) {
       publisher[streamIndex][MONO_8].publish(msgMono8);
       msgMono8 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     }
-    if(status[streamIndex][MONO_16])
-    {
+    if (status[streamIndex][MONO_16]) {
       publisher[streamIndex][MONO_16].publish(msgMono16);
       msgMono16 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     }
-    if(status[streamIndex][DEPTH])
-    {
+    if (status[streamIndex][DEPTH]) {
       publisher[streamIndex][DEPTH].publish(msgDepth);
       msgDepth = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     }
-    if(status[streamIndex][IMAGE_NUMBERED])
-    {
-      publisher[streamIndex][IMAGE_NUMBERED].publish(msgImageNumbered);
-      msgImageNumbered = image_numbered_msgs::ImageNumberedPtr(new image_numbered_msgs::ImageNumbered);
+    if (status[streamIndex][DEPTH_NUMBERED]) {
+      publisher[streamIndex][DEPTH_NUMBERED].publish(msgDepthNumbered);
+      msgDepthNumbered = image_numbered_msgs::ImageNumberedPtr(
+          new image_numbered_msgs::ImageNumbered);
     }
-    if(status[streamIndex][NOISE])
-    {
+    if (status[streamIndex][MONO16_NUMBERED]) {
+      publisher[streamIndex][MONO16_NUMBERED].publish(msgMono16Numbered);
+      msgMono16Numbered = image_numbered_msgs::ImageNumberedPtr(
+          new image_numbered_msgs::ImageNumbered);
+    }
+    if (status[streamIndex][NOISE]) {
       publisher[streamIndex][NOISE].publish(msgNoise);
       msgNoise = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     }
-    if(status[streamIndex][CLOUD])
-    {
+    if (status[streamIndex][CLOUD]) {
       publisher[streamIndex][CLOUD].publish(msgCloud);
       msgCloud = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
     }
@@ -1252,35 +1303,31 @@ private:
       processTime = 0;
       startTime = now;
       delayReceived = 0;
-      OUT_INFO("processing: " FG_YELLOW "~" << std::setprecision(4) << timePerFrame << " ms." NO_COLOR
-               " fps: " FG_YELLOW "~" << framesPerSecond << " Hz" NO_COLOR
-               " delay: " FG_YELLOW "~" << avgDelay << " ms." NO_COLOR);
+      OUT_INFO("processing: " FG_YELLOW "~"
+               << std::setprecision(4) << timePerFrame
+               << " ms." NO_COLOR " fps: " FG_YELLOW "~" << framesPerSecond
+               << " Hz" NO_COLOR " delay: " FG_YELLOW "~" << avgDelay
+               << " ms." NO_COLOR);
     }
     ++frame;
   }
 };
 
-class PicoFlexxNodelet : public nodelet::Nodelet
-{
-private:
-  PicoFlexx *picoFlexx;
+class PicoFlexxNodelet : public nodelet::Nodelet {
+ private:
+  PicoFlexx* picoFlexx;
 
-public:
-  PicoFlexxNodelet() : Nodelet(), picoFlexx(NULL)
-  {
-  }
+ public:
+  PicoFlexxNodelet() : Nodelet(), picoFlexx(NULL) {}
 
-  ~PicoFlexxNodelet()
-  {
-    if(picoFlexx)
-    {
+  ~PicoFlexxNodelet() {
+    if (picoFlexx) {
       picoFlexx->stop();
       delete picoFlexx;
     }
   }
 
-  virtual void onInit()
-  {
+  virtual void onInit() {
     picoFlexx = new PicoFlexx(getNodeHandle(), getPrivateNodeHandle());
     picoFlexx->start();
   }
@@ -1289,12 +1336,10 @@ public:
 #include <pluginlib/class_list_macros.h>
 PLUGINLIB_EXPORT_CLASS(PicoFlexxNodelet, nodelet::Nodelet)
 
-int main(int argc, char **argv)
-{
+int main(int argc, char** argv) {
 #if EXTENDED_OUTPUT
   ROSCONSOLE_AUTOINIT;
-  if(!getenv("ROSCONSOLE_FORMAT"))
-  {
+  if (!getenv("ROSCONSOLE_FORMAT")) {
     ros::console::g_formatter.tokens_.clear();
     ros::console::g_formatter.init("[${severity}] ${message}");
   }
