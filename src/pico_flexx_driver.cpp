@@ -50,6 +50,7 @@
 #define PF_TOPIC_MONO16 "/image_mono16"
 #define PF_TOPIC_DEPTH "/image_raw"
 #define PF_TOPIC_DEPTH_NUMBERED "/image_numbered"
+#define PF_TOPIC_MONO8_NUMBERED "/image_mono8_numbered"
 #define PF_TOPIC_MONO16_NUMBERED "/image_mono16_numbered"
 #define PF_TOPIC_NOISE "/image_noise"
 #define PF_TOPIC_CLOUD "/points"
@@ -114,6 +115,7 @@ class PicoFlexx : public royale::IDepthDataListener,
     MONO_16,
     DEPTH,
     DEPTH_NUMBERED,
+    MONO8_NUMBERED,
     MONO16_NUMBERED,
     NOISE,
     CLOUD,
@@ -167,9 +169,9 @@ class PicoFlexx : public royale::IDepthDataListener,
 
     config.use_case = 0;
     config.exposure_mode = 0;
-    config.exposure_time = 1000;
+    config.exposure_time = 1500;
     config.exposure_mode_stream2 = 0;
-    config.exposure_time_stream2 = 1000;
+    config.exposure_time_stream2 = 100;
     config.max_noise = 0.07;
     config.range_factor = 2.0;
 
@@ -476,8 +478,8 @@ class PicoFlexx : public royale::IDepthDataListener,
     priv_nh.param("use_case", useCase, 0);
     priv_nh.param("automatic_exposure", automaticExposure, true);
     priv_nh.param("automatic_exposure", automaticExposureStream2, true);
-    priv_nh.param("exposure_time", exposureTime, 1000);
-    priv_nh.param("exposure_time_stream2", exposureTimeStream2, 1000);
+    priv_nh.param("exposure_time", exposureTime, 1500);
+    priv_nh.param("exposure_time_stream2", exposureTimeStream2, 100);
     priv_nh.param("max_noise", maxNoise, 0.7);
     priv_nh.param("range_factor", rangeFactor, 2.0);
     priv_nh.param("queue_size", queueSize, 20);
@@ -589,6 +591,9 @@ class PicoFlexx : public royale::IDepthDataListener,
     publisher[0][DEPTH_NUMBERED] =
         nh.advertise<image_numbered_msgs::ImageNumbered>(
             baseName + PF_TOPIC_DEPTH_NUMBERED, queueSize, cb, cb);
+    publisher[0][MONO8_NUMBERED] =
+        nh.advertise<image_numbered_msgs::ImageNumbered>(
+            baseName + PF_TOPIC_MONO8_NUMBERED, queueSize, cb, cb);
     publisher[0][MONO16_NUMBERED] =
         nh.advertise<image_numbered_msgs::ImageNumbered>(
             baseName + PF_TOPIC_MONO16_NUMBERED, queueSize, cb, cb);
@@ -609,6 +614,9 @@ class PicoFlexx : public royale::IDepthDataListener,
     publisher[1][DEPTH_NUMBERED] =
         nh.advertise<image_numbered_msgs::ImageNumbered>(
             baseName + "/stream2" + PF_TOPIC_DEPTH_NUMBERED, queueSize, cb, cb);
+    publisher[1][MONO8_NUMBERED] =
+        nh.advertise<image_numbered_msgs::ImageNumbered>(
+            baseName + "/stream2" + PF_TOPIC_MONO8_NUMBERED, queueSize, cb, cb);
     publisher[1][MONO16_NUMBERED] =
         nh.advertise<image_numbered_msgs::ImageNumbered>(
             baseName + "/stream2" + PF_TOPIC_MONO16_NUMBERED, queueSize, cb,
@@ -858,12 +866,16 @@ class PicoFlexx : public royale::IDepthDataListener,
   bool setExposure(const uint32_t exposure,
                    const royale::StreamId streamId = 0) {
     royale::Pair<uint32_t, uint32_t> limits;
-    cameraDevice->getExposureLimits(limits, streamId);
-
-    if (exposure < limits.first || exposure > limits.second) {
-      OUT_ERROR("exposure outside of limits!");
-      return false;
-    }
+    while (true) {
+      cameraDevice->getExposureLimits(limits, streamId);
+      if (exposure < limits.first || exposure > limits.second) {
+        OUT_ERROR("exposure outside of limits!");
+        continue;
+      } else {
+        OUT_INFO("exposure is within limits.");
+        break;
+      }
+    };
 
     if (cameraDevice->setExposureTime(exposure, streamId) !=
         royale::CameraStatus::SUCCESS) {
@@ -938,6 +950,7 @@ class PicoFlexx : public royale::IDepthDataListener,
     sensor_msgs::CameraInfoPtr msgCameraInfo;
     sensor_msgs::ImagePtr msgMono8, msgMono16, msgDepth, msgNoise;
     image_numbered_msgs::ImageNumberedPtr msgDepthNumbered;
+    image_numbered_msgs::ImageNumberedPtr msgMono8Numbered;
     image_numbered_msgs::ImageNumberedPtr msgMono16Numbered;
     sensor_msgs::PointCloud2Ptr msgCloud;
     uint64_t imageNumber = 0;
@@ -947,6 +960,8 @@ class PicoFlexx : public royale::IDepthDataListener,
     msgMono16 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     msgDepth = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     msgDepthNumbered = image_numbered_msgs::ImageNumberedPtr(
+        new image_numbered_msgs::ImageNumbered);
+    msgMono8Numbered = image_numbered_msgs::ImageNumberedPtr(
         new image_numbered_msgs::ImageNumbered);
     msgMono16Numbered = image_numbered_msgs::ImageNumberedPtr(
         new image_numbered_msgs::ImageNumbered);
@@ -970,10 +985,11 @@ class PicoFlexx : public royale::IDepthDataListener,
       size_t streamIndex;
       if (findStreamIndex(data->streamId, streamIndex)) {
         extractData(*data, msgCameraInfo, msgCloud, msgMono8, msgMono16,
-                    msgDepth, msgDepthNumbered, msgMono16Numbered, msgNoise,
-                    imageNumber, streamIndex);
+                    msgDepth, msgDepthNumbered, msgMono8Numbered,
+                    msgMono16Numbered, msgNoise, imageNumber, streamIndex);
         publish(msgCameraInfo, msgCloud, msgMono8, msgMono16, msgDepth,
-                msgDepthNumbered, msgMono16Numbered, msgNoise, streamIndex);
+                msgDepthNumbered, msgMono8Numbered, msgMono16Numbered, msgNoise,
+                streamIndex);
       }
       lockStatus.unlock();
 
@@ -1007,6 +1023,7 @@ class PicoFlexx : public royale::IDepthDataListener,
                    sensor_msgs::ImagePtr& msgMono16,
                    sensor_msgs::ImagePtr& msgDepth,
                    image_numbered_msgs::ImageNumberedPtr& msgDepthNumbered,
+                   image_numbered_msgs::ImageNumberedPtr& msgMono8Numbered,
                    image_numbered_msgs::ImageNumberedPtr& msgMono16Numbered,
                    sensor_msgs::ImagePtr& msgNoise, uint64_t& imageNumber,
                    size_t streamIndex = 0) const {
@@ -1026,10 +1043,18 @@ class PicoFlexx : public royale::IDepthDataListener,
 
     if (!(status[streamIndex][MONO_8] || status[streamIndex][MONO_16] ||
           status[streamIndex][DEPTH] || status[streamIndex][DEPTH_NUMBERED] ||
+          status[streamIndex][MONO8_NUMBERED] ||
           status[streamIndex][MONO16_NUMBERED] || status[streamIndex][NOISE] ||
           status[streamIndex][CLOUD])) {
       return;
     }
+    msgMono8->header = header;
+    msgMono8->height = data.height;
+    msgMono8->width = data.width;
+    msgMono8->is_bigendian = false;
+    msgMono8->encoding = sensor_msgs::image_encodings::MONO8;
+    msgMono8->step = (uint32_t)(sizeof(uint8_t) * data.width);
+    msgMono8->data.resize(sizeof(uint8_t) * data.points.size());
 
     msgMono16->header = header;
     msgMono16->height = data.height;
@@ -1056,6 +1081,16 @@ class PicoFlexx : public royale::IDepthDataListener,
     msgDepthNumbered->image.step = msgDepth->step;
     msgDepthNumbered->image.data.resize(sizeof(float) * data.points.size());
     msgDepthNumbered->number = imageNumber;
+
+    msgMono8Numbered->header = msgMono8->header;
+    msgMono8Numbered->image.header = msgMono8->header;
+    msgMono8Numbered->image.height = msgMono8->height;
+    msgMono8Numbered->image.width = msgMono8->width;
+    msgMono8Numbered->image.is_bigendian = msgMono8->is_bigendian;
+    msgMono8Numbered->image.encoding = msgMono8->encoding;
+    msgMono8Numbered->image.step = msgMono8->step;
+    msgMono8Numbered->image.data.resize(sizeof(uint8_t) * data.points.size());
+    msgMono8Numbered->number = imageNumber;
 
     msgMono16Numbered->header = msgMono16->header;
     msgMono16Numbered->image.header = msgMono16->header;
@@ -1225,6 +1260,7 @@ class PicoFlexx : public royale::IDepthDataListener,
                sensor_msgs::ImagePtr& msgMono16,
                sensor_msgs::ImagePtr& msgDepth,
                image_numbered_msgs::ImageNumberedPtr& msgDepthNumbered,
+               image_numbered_msgs::ImageNumberedPtr& msgMono8Numbered,
                image_numbered_msgs::ImageNumberedPtr& msgMono16Numbered,
                sensor_msgs::ImagePtr& msgNoise, size_t streamIndex = 0) const {
     if (status[streamIndex][CAMERA_INFO]) {
@@ -1246,6 +1282,11 @@ class PicoFlexx : public royale::IDepthDataListener,
     if (status[streamIndex][DEPTH_NUMBERED]) {
       publisher[streamIndex][DEPTH_NUMBERED].publish(msgDepthNumbered);
       msgDepthNumbered = image_numbered_msgs::ImageNumberedPtr(
+          new image_numbered_msgs::ImageNumbered);
+    }
+    if (status[streamIndex][MONO8_NUMBERED]) {
+      publisher[streamIndex][MONO8_NUMBERED].publish(msgMono8Numbered);
+      msgMono8Numbered = image_numbered_msgs::ImageNumberedPtr(
           new image_numbered_msgs::ImageNumbered);
     }
     if (status[streamIndex][MONO16_NUMBERED]) {
