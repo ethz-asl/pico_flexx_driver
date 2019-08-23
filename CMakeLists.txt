@@ -41,6 +41,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 ## System dependencies are found with CMake's conventions
 find_package(royale REQUIRED)
+find_package(TIFF REQUIRED)
 
 # combine cmake_cxx_flags and additional_cxx_flags
 # plus change the space-separated string, into a list delimited by semicolons
@@ -90,6 +91,7 @@ add_custom_target(additional_files_${PROJECT_NAME}
 include_directories(
   ${catkin_INCLUDE_DIRS}
   ${royale_INCLUDE_DIRS}
+  ${TIFF_INCLUDE_DIRS}
 )
 
 link_directories(${royale_LIB_DIR})
@@ -99,6 +101,7 @@ add_library(pico_flexx_nodelet SHARED src/pico_flexx_driver.cpp)
 target_link_libraries(pico_flexx_nodelet
   ${catkin_LIBRARIES}
   ${royale_LIBRARIES}
+  ${TIFF_LIBRARIES}
 )
 add_dependencies(pico_flexx_nodelet ${PROJECT_NAME}_gencfg)
 target_compile_options(pico_flexx_nodelet PUBLIC ${cxx_flags})
@@ -107,6 +110,7 @@ add_executable(pico_flexx_driver src/pico_flexx_driver.cpp)
 target_link_libraries(pico_flexx_driver
   ${catkin_LIBRARIES}
   ${royale_LIBRARIES}
+  ${TIFF_LIBRARIES}
 )
 add_dependencies(pico_flexx_driver ${PROJECT_NAME}_gencfg)
 target_compile_options(pico_flexx_driver PUBLIC ${cxx_flags})

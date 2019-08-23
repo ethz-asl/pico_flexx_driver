@@ -15,6 +15,8 @@
   <arg name="range_factor"       default="2.0"/>
   <!-- Queue size for publisher. -->
   <arg name="queue_size"         default="5"/>
+  <!-- Pixel exclusion mask (TIFF). -->
+  <arg name="exclusion_mask_path"         default="$(find pico_flexx_driver)/cfg/exclusion_mask.tiff"/>
   <!-- Publish a static TF transform for the optical frame of the camera. -->
   <arg name="publish_tf"         default="false" />
   <!-- Base name of the tf frames. -->
@@ -52,5 +54,6 @@
     <param name="range_factor"       type="double" value="$(arg range_factor)"/>
     <param name="queue_size"         type="int"    value="$(arg queue_size)"/>
     <param name="base_name_tf"       type="str"    value="$(arg base_name_tf)"/>
+    <param name="exclusion_mask_path" type="str"   value="$(arg exclusion_mask_path)"/>
   </node>
 </launch>

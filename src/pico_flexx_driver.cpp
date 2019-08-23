@@ -36,6 +36,8 @@
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/PointCloud2.h>
 
+#include <tiffio.h>
+
 #include <royale.hpp>
 
 #include <dynamic_reconfigure/server.h>
@@ -123,6 +125,8 @@ private:
   pico_flexx_driver::pico_flexx_driverConfig configMin, configMax, config;
   std::vector<int> cbExposureTime;
 
+  std::unique_ptr<uint8_t[]> exclusion_mask;
+
   std::unique_ptr<royale::ICameraDevice> cameraDevice;
   std::unique_ptr<royale::DepthData> data;
 
@@ -137,8 +141,7 @@ private:
 
 public:
   PicoFlexx(const ros::NodeHandle &nh = ros::NodeHandle(), const ros::NodeHandle &priv_nh = ros::NodeHandle("~"))
-    : royale::IDepthDataListener(), royale::IExposureListener2(), nh(nh), priv_nh(priv_nh), server(lockServer, priv_nh)
-  {
+    : royale::IDepthDataListener(), royale::IExposureListener2(), nh(nh), priv_nh(priv_nh), server(lockServer, priv_nh) {
     cbExposureTime.resize(2);
     running = false;
     newData = false;
@@ -177,6 +180,28 @@ public:
     configMax.exposure_time_stream2 = 2000;
     configMax.max_noise = 0.10;
     configMax.range_factor = 7.0;
+
+
+
+    // Load exclusion mask
+    std::string exclusion_mask_path;
+    priv_nh.param<std::string>("exclusion_mask_path", exclusion_mask_path, "");
+
+
+    TIFF *tif = TIFFOpen(exclusion_mask_path.c_str(), "r");
+    if (tif) {
+      uint32_t mask_width = TIFFScanlineSize(tif), mask_height;
+      TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &mask_height);
+      std::cout << mask_width << " " << mask_height << std::endl;
+
+      exclusion_mask.reset(new (std::nothrow) uint8_t[mask_width*mask_height] );
+
+      for (uint32_t row = 0; row < mask_height; row++) {
+
+        TIFFReadScanline(tif, exclusion_mask.get() + row * mask_width, row);
+      }
+      TIFFClose(tif);
+    }
   }
 
   ~PicoFlexx()
@@ -1061,16 +1086,20 @@ private:
     const royale::DepthPoint *itI = &data.points[0];
     float *itD = (float *)&msgDepth->data[0];
     float *itN = (float *)&msgNoise->data[0];
+    uint32_t itMask = 0;
+
     uint16_t *itM = (uint16_t *)&msgMono16->data[0];
-    for(size_t i = 0; i < data.points.size(); ++i, ++itI, ++itD, ++itM, ++itN)
+    for(size_t i = 0; i < data.points.size(); ++i, ++itI, ++itD, ++itM, ++itN, ++itMask)
     {
       float *itCX = (float *)&msgCloud->data[i * msgCloud->point_step];
       float *itCY = itCX + 1;
       float *itCZ = itCY + 1;
       float *itCN = itCZ + 1;                    // "noise" field
+
       uint16_t *itCM = (uint16_t *)(itCN + 1);   // "intensity" field
 
-      if(itI->depthConfidence && itI->noise < maxNoise)
+      if(itI->depthConfidence && itI->noise < maxNoise &&
+        (!exclusion_mask || (exclusion_mask &&exclusion_mask[itMask])))
       {
         *itCX = itI->x;
         *itCY = itI->y;
